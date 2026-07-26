@@ -321,11 +321,13 @@ fn send_codex_turn(
         .runtime
         .lock()
         .map_err(|_| "状態のロックに失敗しました")?;
-    let request_id = runtime
+    let process = runtime
         .as_mut()
-        .filter(|process| process.is_running())
-        .ok_or("Codex app-serverは実行されていません")?
-        .start_turn(&thread_id, text)?;
+        .ok_or("Codex app-serverは実行されていません")?;
+    if !process.is_running() {
+        return Err("Codex app-serverは実行されていません".to_string());
+    }
+    let request_id = process.start_turn(&thread_id, text)?;
     let mut sessions = state
         .sessions
         .lock()
