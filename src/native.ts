@@ -16,6 +16,14 @@ export interface NativeSession {
   currentTask: string;
 }
 
+export interface NativeChangedFile {
+  path: string;
+  kind: "modified" | "added" | "deleted";
+  additions: number;
+  deletions: number;
+  reason: string;
+}
+
 export const isDesktop = () =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 

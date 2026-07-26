@@ -486,22 +486,24 @@ export function App() {
             <button className="diff-mode">左右比較</button>
           </div>
           <div className="diff-preview">
-            <div className="diff-line removed">
-              <span>42</span>
-              <code>- allow_all_commands: true</code>
-            </div>
-            <div className="diff-line added">
-              <span>42</span>
-              <code>+ approval_policy: ApprovalPolicy::Prompt</code>
-            </div>
-            <div className="diff-line added">
-              <span>43</span>
-              <code>+ validate_project_root(&amp;cwd)?;</code>
-            </div>
-            <div className="diff-line context">
-              <span>44</span>
-              <code> audit.write(decision);</code>
-            </div>
+            {shell.diffPreview ? (
+              <pre>{shell.diffPreview}</pre>
+            ) : (
+              <>
+                <div className="diff-line removed">
+                  <span>42</span>
+                  <code>- allow_all_commands: true</code>
+                </div>
+                <div className="diff-line added">
+                  <span>42</span>
+                  <code>+ approval_policy: ApprovalPolicy::Prompt</code>
+                </div>
+                <div className="diff-line added">
+                  <span>43</span>
+                  <code>+ validate_project_root(&amp;cwd)?;</code>
+                </div>
+              </>
+            )}
           </div>
           <div className="change-reason">
             <Sparkles size={14} />

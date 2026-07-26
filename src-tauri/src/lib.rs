@@ -1,4 +1,5 @@
 mod app_server;
+mod git;
 
 use std::{
     collections::HashMap,
@@ -57,6 +58,18 @@ fn canonical_project_root(raw_path: &str) -> Result<PathBuf, String> {
     Ok(root)
 }
 
+fn project_root(state: &ShellState, project_id: &str) -> Result<PathBuf, String> {
+    let project = state
+        .projects
+        .lock()
+        .map_err(|_| "状態のロックに失敗しました")?
+        .iter()
+        .find(|project| project.id == project_id)
+        .cloned()
+        .ok_or("未登録のプロジェクトです")?;
+    canonical_project_root(&project.path)
+}
+
 #[tauri::command]
 fn register_project(
     state: State<ShellState>,
@@ -84,6 +97,23 @@ fn list_projects(state: State<ShellState>) -> Result<Vec<Project>, String> {
         .lock()
         .map_err(|_| "状態のロックに失敗しました")?
         .clone())
+}
+
+#[tauri::command]
+fn get_changed_files(
+    state: State<ShellState>,
+    project_id: String,
+) -> Result<Vec<git::ChangedFile>, String> {
+    git::changed_files(&project_root(&state, &project_id)?)
+}
+
+#[tauri::command]
+fn get_file_diff(
+    state: State<ShellState>,
+    project_id: String,
+    path: String,
+) -> Result<String, String> {
+    git::diff(&project_root(&state, &project_id)?, &path)
 }
 
 #[tauri::command]
@@ -148,7 +178,10 @@ fn rename_session(
 }
 
 #[tauri::command]
-fn duplicate_session(state: State<ShellState>, session_id: String) -> Result<NativeSession, String> {
+fn duplicate_session(
+    state: State<ShellState>,
+    session_id: String,
+) -> Result<NativeSession, String> {
     let mut sessions = state
         .sessions
         .lock()
@@ -315,6 +348,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             register_project,
             list_projects,
+            get_changed_files,
+            get_file_diff,
             create_session,
             list_sessions,
             rename_session,

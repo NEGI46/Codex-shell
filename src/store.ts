@@ -2,6 +2,7 @@ import { create } from "zustand";
 import {
   desktopInvoke,
   isDesktop,
+  type NativeChangedFile,
   type NativeProject,
   type NativeSession,
 } from "./native";
@@ -148,6 +149,7 @@ interface ShellState {
   activeSessionId: string;
   changes: ChangedFile[];
   selectedChange: string;
+  diffPreview: string;
   approvals: Approval[];
   bottomTab: BottomTab;
   composer: string;
@@ -174,6 +176,7 @@ interface ShellState {
   toggleBottom: () => void;
   hydrateDesktopState: () => Promise<void>;
   receiveCodexEvent: (event: string) => void;
+  refreshChanges: (projectId?: string) => Promise<void>;
 }
 
 export const useShellStore = create<ShellState>((set, get) => ({
@@ -183,6 +186,7 @@ export const useShellStore = create<ShellState>((set, get) => ({
   activeSessionId: "s-architecture",
   changes,
   selectedChange: changes[0].path,
+  diffPreview: "",
   approvals,
   bottomTab: "terminal",
   composer: "",
@@ -376,7 +380,20 @@ export const useShellStore = create<ShellState>((set, get) => ({
           : session,
       ),
     })),
-  selectChange: (selectedChange) => set({ selectedChange }),
+  selectChange: (selectedChange) => {
+    set({ selectedChange });
+    if (!isDesktop()) return;
+    const active = get().sessions.find(
+      (session) => session.id === get().activeSessionId,
+    );
+    if (!active) return;
+    void desktopInvoke<string>("get_file_diff", {
+      projectId: active.projectId,
+      path: selectedChange,
+    }).then((diffPreview) => {
+      if (diffPreview !== undefined) set({ diffPreview });
+    });
+  },
   decideApproval: (id, decision) =>
     set((state) => ({
       approvals:
@@ -417,6 +434,7 @@ export const useShellStore = create<ShellState>((set, get) => ({
       openTabIds: sessions.map((session) => session.id),
       activeSessionId: sessions[0]?.id ?? state.activeSessionId,
     }));
+    await get().refreshChanges(nativeProjects[0]?.id);
   },
   receiveCodexEvent: (event) => {
     let parsed: unknown;
@@ -448,6 +466,21 @@ export const useShellStore = create<ShellState>((set, get) => ({
           : session,
       ),
     }));
+  },
+  refreshChanges: async (projectId) => {
+    if (!isDesktop()) return;
+    const selectedProjectId = projectId ?? get().projects[0]?.id;
+    if (!selectedProjectId) return;
+    const changes = await desktopInvoke<NativeChangedFile[]>(
+      "get_changed_files",
+      { projectId: selectedProjectId },
+    );
+    if (!changes) return;
+    set({
+      changes,
+      selectedChange: changes[0]?.path ?? "",
+      diffPreview: "",
+    });
   },
 }));
 
