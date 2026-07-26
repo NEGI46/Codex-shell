@@ -24,6 +24,19 @@ export interface NativeChangedFile {
   reason: string;
 }
 
+export interface NativeApproval {
+  id: string;
+  sessionId: string;
+  kind: "command" | "network" | "file" | "git" | "mcp";
+  risk: "low" | "medium" | "high";
+  title: string;
+  command: string;
+  reason: string;
+  impact: string;
+  destructive: boolean;
+  status: string;
+}
+
 export const isDesktop = () =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
