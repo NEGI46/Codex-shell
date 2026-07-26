@@ -1,0 +1,45 @@
+# Dependencies and builds
+node_modules/
+dist/
+build/
+target/
+coverage/
+playwright-report/
+test-results/
+
+# Local application data and databases
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+.codex-shell/
+
+# Environment and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.kdbx
+credentials.json
+auth.json
+secrets.json
+
+# OS and editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs and sensitive diagnostic captures
+*.log
+logs/
+*.trace
+*.har
