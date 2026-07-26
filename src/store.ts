@@ -3,6 +3,7 @@ import {
   desktopInvoke,
   isDesktop,
   type NativeChangedFile,
+  type NativeApproval,
   type NativeProject,
   type NativeSession,
 } from "./native";
@@ -395,26 +396,39 @@ export const useShellStore = create<ShellState>((set, get) => ({
     });
   },
   decideApproval: (id, decision) =>
-    set((state) => ({
-      approvals:
-        decision === "defer"
-          ? state.approvals
-          : state.approvals.filter((approval) => approval.id !== id),
-      sessions: state.sessions.map((session) =>
-        state.approvals.find((approval) => approval.id === id)?.sessionId ===
-        session.id
-          ? {
-              ...session,
-              status: decision === "deny" ? "idle" : "running",
-              currentTask:
-                decision === "deny"
-                  ? "操作を拒否しました"
-                  : "承認済み操作を実行中",
-              updatedAt: now(),
-            }
-          : session,
-      ),
-    })),
+    set((state) => {
+      const approval = state.approvals.find((item) => item.id === id);
+      if (isDesktop() && approval) {
+        const confirmDestructive =
+          !approval.destructive ||
+          window.confirm("この操作は破壊的です。本当に許可しますか？");
+        void desktopInvoke("decide_approval", {
+          approvalId: id,
+          decision,
+          confirmDestructive,
+        });
+      }
+      return {
+        approvals:
+          decision === "defer"
+            ? state.approvals
+            : state.approvals.filter((approval) => approval.id !== id),
+        sessions: state.sessions.map((session) =>
+          state.approvals.find((approval) => approval.id === id)?.sessionId ===
+          session.id
+            ? {
+                ...session,
+                status: decision === "deny" ? "idle" : "running",
+                currentTask:
+                  decision === "deny"
+                    ? "操作を拒否しました"
+                    : "承認済み操作を実行中",
+                updatedAt: now(),
+              }
+            : session,
+        ),
+      };
+    }),
   setBottomTab: (bottomTab) => set({ bottomTab }),
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
   toggleLeft: () => set((state) => ({ leftCollapsed: !state.leftCollapsed })),
@@ -422,17 +436,21 @@ export const useShellStore = create<ShellState>((set, get) => ({
     set((state) => ({ bottomCollapsed: !state.bottomCollapsed })),
   hydrateDesktopState: async () => {
     if (!isDesktop()) return;
-    const [nativeProjects, nativeSessions] = await Promise.all([
-      desktopInvoke<NativeProject[]>("list_projects"),
-      desktopInvoke<NativeSession[]>("list_sessions"),
-    ]);
-    if (!nativeProjects || !nativeSessions) return;
+    const [nativeProjects, nativeSessions, nativeApprovals] = await Promise.all(
+      [
+        desktopInvoke<NativeProject[]>("list_projects"),
+        desktopInvoke<NativeSession[]>("list_sessions"),
+        desktopInvoke<NativeApproval[]>("list_approvals"),
+      ],
+    );
+    if (!nativeProjects || !nativeSessions || !nativeApprovals) return;
     const sessions = nativeSessions.map(nativeToSession);
     set((state) => ({
       projects: nativeProjects,
       sessions,
       openTabIds: sessions.map((session) => session.id),
       activeSessionId: sessions[0]?.id ?? state.activeSessionId,
+      approvals: nativeApprovals,
     }));
     await get().refreshChanges(nativeProjects[0]?.id);
   },

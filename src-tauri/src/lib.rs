@@ -1,5 +1,6 @@
 mod app_server;
 mod git;
+mod storage;
 
 use std::{
     collections::HashMap,
@@ -8,11 +9,11 @@ use std::{
     sync::Mutex,
 };
 
-use serde::Serialize;
-use tauri::{AppHandle, State};
+use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Project {
     id: String,
@@ -20,7 +21,7 @@ struct Project {
     path: String,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct NativeSession {
     id: String,
@@ -31,20 +32,75 @@ struct NativeSession {
     current_task: String,
 }
 
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeApproval {
+    id: String,
+    session_id: String,
+    kind: String,
+    risk: String,
+    title: String,
+    command: String,
+    reason: String,
+    impact: String,
+    destructive: bool,
+    status: String,
+}
+
 struct ShellState {
     projects: Mutex<Vec<Project>>,
     sessions: Mutex<HashMap<String, NativeSession>>,
+    approvals: Mutex<Vec<NativeApproval>>,
     runtime: Mutex<Option<app_server::AppServerProcess>>,
+    storage: storage::Storage,
 }
 
-impl Default for ShellState {
-    fn default() -> Self {
-        Self {
-            projects: Mutex::new(Vec::new()),
-            sessions: Mutex::new(HashMap::new()),
+impl ShellState {
+    fn open(storage: storage::Storage) -> Result<Self, String> {
+        let projects = storage.load("projects")?.unwrap_or_default();
+        let sessions = storage.load("sessions")?.unwrap_or_default();
+        let approvals = storage.load("approvals")?.unwrap_or_default();
+        Ok(Self {
+            projects: Mutex::new(projects),
+            sessions: Mutex::new(sessions),
+            approvals: Mutex::new(approvals),
             runtime: Mutex::new(None),
-        }
+            storage,
+        })
     }
+}
+
+fn persist_projects(state: &ShellState) -> Result<(), String> {
+    state.storage.save(
+        "projects",
+        &state
+            .projects
+            .lock()
+            .map_err(|_| "状態のロックに失敗しました")?
+            .clone(),
+    )
+}
+
+fn persist_sessions(state: &ShellState) -> Result<(), String> {
+    state.storage.save(
+        "sessions",
+        &state
+            .sessions
+            .lock()
+            .map_err(|_| "状態のロックに失敗しました")?
+            .clone(),
+    )
+}
+
+fn persist_approvals(state: &ShellState) -> Result<(), String> {
+    state.storage.save(
+        "approvals",
+        &state
+            .approvals
+            .lock()
+            .map_err(|_| "状態のロックに失敗しました")?
+            .clone(),
+    )
 }
 
 fn canonical_project_root(raw_path: &str) -> Result<PathBuf, String> {
@@ -87,6 +143,7 @@ fn register_project(
         .lock()
         .map_err(|_| "状態のロックに失敗しました")?
         .push(project.clone());
+    persist_projects(&state)?;
     Ok(project)
 }
 
@@ -140,6 +197,7 @@ fn create_session(state: State<ShellState>, project_id: String) -> Result<Native
         .lock()
         .map_err(|_| "状態のロックに失敗しました")?
         .insert(session.id.clone(), session.clone());
+    persist_sessions(&state)?;
     Ok(session)
 }
 
@@ -154,6 +212,94 @@ fn list_sessions(state: State<ShellState>) -> Result<Vec<NativeSession>, String>
         .collect::<Vec<_>>();
     sessions.sort_by(|left, right| left.id.cmp(&right.id));
     Ok(sessions)
+}
+
+#[tauri::command]
+fn list_approvals(state: State<ShellState>) -> Result<Vec<NativeApproval>, String> {
+    Ok(state
+        .approvals
+        .lock()
+        .map_err(|_| "状態のロックに失敗しました")?
+        .iter()
+        .filter(|approval| approval.status == "pending")
+        .cloned()
+        .collect())
+}
+
+#[tauri::command]
+fn queue_approval(
+    state: State<ShellState>,
+    session_id: String,
+    kind: String,
+    risk: String,
+    title: String,
+    command: String,
+    reason: String,
+    impact: String,
+    destructive: bool,
+) -> Result<NativeApproval, String> {
+    if !["command", "network", "file", "git", "mcp"].contains(&kind.as_str())
+        || !["low", "medium", "high"].contains(&risk.as_str())
+    {
+        return Err("承認要求の種類または危険度が不正です".to_string());
+    }
+    if !state
+        .sessions
+        .lock()
+        .map_err(|_| "状態のロックに失敗しました")?
+        .contains_key(&session_id)
+    {
+        return Err("セッションが見つかりません".to_string());
+    }
+    let approval = NativeApproval {
+        id: Uuid::new_v4().to_string(),
+        session_id,
+        kind,
+        risk,
+        title: title.chars().take(160).collect(),
+        command: command.chars().take(4_000).collect(),
+        reason: reason.chars().take(2_000).collect(),
+        impact: impact.chars().take(2_000).collect(),
+        destructive,
+        status: "pending".to_string(),
+    };
+    state
+        .approvals
+        .lock()
+        .map_err(|_| "状態のロックに失敗しました")?
+        .push(approval.clone());
+    persist_approvals(&state)?;
+    Ok(approval)
+}
+
+#[tauri::command]
+fn decide_approval(
+    state: State<ShellState>,
+    approval_id: String,
+    decision: String,
+    confirm_destructive: bool,
+) -> Result<NativeApproval, String> {
+    if !["allow_once", "allow_session", "deny", "defer"].contains(&decision.as_str()) {
+        return Err("承認の決定が不正です".to_string());
+    }
+    let mut approvals = state
+        .approvals
+        .lock()
+        .map_err(|_| "状態のロックに失敗しました")?;
+    let approval = approvals
+        .iter_mut()
+        .find(|approval| approval.id == approval_id)
+        .ok_or("承認要求が見つかりません")?;
+    if approval.destructive && decision.starts_with("allow") && !confirm_destructive {
+        return Err("破壊的操作には追加確認が必要です".to_string());
+    }
+    if decision != "defer" {
+        approval.status = decision;
+    }
+    let result = approval.clone();
+    drop(approvals);
+    persist_approvals(&state)?;
+    Ok(result)
 }
 
 #[tauri::command]
@@ -174,7 +320,10 @@ fn rename_session(
         .get_mut(&session_id)
         .ok_or("セッションが見つかりません")?;
     session.title = title.to_string();
-    Ok(session.clone())
+    let result = session.clone();
+    drop(sessions);
+    persist_sessions(&state)?;
+    Ok(result)
 }
 
 #[tauri::command]
@@ -199,6 +348,8 @@ fn duplicate_session(
         current_task: "複製元の会話を参照して指示を待機中".to_string(),
     };
     sessions.insert(duplicated.id.clone(), duplicated.clone());
+    drop(sessions);
+    persist_sessions(&state)?;
     Ok(duplicated)
 }
 
@@ -213,6 +364,8 @@ fn end_session(state: State<ShellState>, session_id: String) -> Result<(), Strin
         .ok_or("セッションが見つかりません")?;
     session.status = "stopped".to_string();
     session.current_task = "ユーザーが終了しました".to_string();
+    drop(sessions);
+    persist_sessions(&state)?;
     Ok(())
 }
 
@@ -275,6 +428,8 @@ fn start_codex_session(
         session.status = "running".to_string();
         session.current_task = "Codexセッションを開始中".to_string();
     }
+    drop(sessions);
+    persist_sessions(&state)?;
     Ok(request_id)
 }
 
@@ -297,6 +452,8 @@ fn bind_codex_thread(
     session.external_thread_id = Some(thread_id);
     session.status = "idle".to_string();
     session.current_task = "指示を待機中".to_string();
+    drop(sessions);
+    persist_sessions(&state)?;
     Ok(())
 }
 
@@ -336,6 +493,8 @@ fn send_codex_turn(
         session.status = "running".to_string();
         session.current_task = "Codexが応答を生成中".to_string();
     }
+    drop(sessions);
+    persist_sessions(&state)?;
     Ok(request_id)
 }
 
@@ -346,7 +505,16 @@ fn codex_available() -> bool {
 
 pub fn run() {
     tauri::Builder::default()
-        .manage(ShellState::default())
+        .setup(|app| {
+            let directory = app
+                .path()
+                .app_data_dir()
+                .map_err(|error| std::io::Error::other(format!("アプリデータの保存先を取得できません: {error}")))?;
+            let storage = storage::Storage::open(&directory).map_err(std::io::Error::other)?;
+            let state = ShellState::open(storage).map_err(std::io::Error::other)?;
+            app.manage(state);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             register_project,
             list_projects,
@@ -354,6 +522,9 @@ pub fn run() {
             get_file_diff,
             create_session,
             list_sessions,
+            list_approvals,
+            queue_approval,
+            decide_approval,
             rename_session,
             duplicate_session,
             end_session,
