@@ -6,13 +6,13 @@ Codex Shell operates code and commands on local projects. Primary risks: comprom
 
 ## Trust boundaries
 
-| Boundary | Rule |
-| --- | --- |
-| Renderer → Rust | renderer is untrusted; only typed intent crosses IPC |
-| Rust → broker | private transport with per-launch capability; no network listener |
-| Project root → filesystem | canonicalize/recheck reparse points and enforce containment |
-| Codex output → action | output is untrusted data; it cannot grant permissions |
-| Logs → UI/database | redact known secret patterns and bound size |
+| Boundary                  | Rule                                                              |
+| ------------------------- | ----------------------------------------------------------------- |
+| Renderer → Rust           | renderer is untrusted; only typed intent crosses IPC              |
+| Rust → broker             | private transport with per-launch capability; no network listener |
+| Project root → filesystem | canonicalize/recheck reparse points and enforce containment       |
+| Codex output → action     | output is untrusted data; it cannot grant permissions             |
+| Logs → UI/database        | redact known secret patterns and bound size                       |
 
 ## Mandatory controls
 

@@ -23,27 +23,27 @@ Conversation receives the largest width. The right column intentionally puts evi
 
 ## Panel behaviors
 
-| Area | Content | Controls |
-| --- | --- | --- |
-| Left | projects/sessions | add, search, rename, duplicate, resume, end |
-| Center | tabs/conversation | drag, pin, close-confirm, send, stop, steer |
-| Right top | changes/diff | select, display mode, open editor, request revert |
-| Right bottom | approval queue | priority, inspect, defer, deny, allow |
-| Bottom | terminal/evidence | new terminal, stop, rerun, resize/collapse/maximize |
+| Area         | Content           | Controls                                            |
+| ------------ | ----------------- | --------------------------------------------------- |
+| Left         | projects/sessions | add, search, rename, duplicate, resume, end         |
+| Center       | tabs/conversation | drag, pin, close-confirm, send, stop, steer         |
+| Right top    | changes/diff      | select, display mode, open editor, request revert   |
+| Right bottom | approval queue    | priority, inspect, defer, deny, allow               |
+| Bottom       | terminal/evidence | new terminal, stop, rerun, resize/collapse/maximize |
 
 Dividers are draggable. Panels can hide/collapse/maximize/restore, save project presets, and reset. Closed tabs preserve sessions and remain restorable.
 
 ## Status and palette
 
-| State | Mark | Label |
-| --- | --- | --- |
-| running | animated dot | 実行中 |
-| idle | neutral dot | 待機中 |
-| needs input | question badge | 入力待ち |
-| needs approval | amber shield | 承認待ち |
-| completed | check | 完了 |
-| stopped | square | 停止 |
-| error | error mark | エラー |
+| State          | Mark           | Label    |
+| -------------- | -------------- | -------- |
+| running        | animated dot   | 実行中   |
+| idle           | neutral dot    | 待機中   |
+| needs input    | question badge | 入力待ち |
+| needs approval | amber shield   | 承認待ち |
+| completed      | check          | 完了     |
+| stopped        | square         | 停止     |
+| error          | error mark     | エラー   |
 
 Unread is a separate badge. Approval detail shows operation, reason, scope, risk, explanation, and related evidence. High risk adds second confirmation; the allow action is never default focus.
 
