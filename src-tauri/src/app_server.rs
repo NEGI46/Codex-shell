@@ -26,9 +26,18 @@ impl AppServerProcess {
             .spawn()
             .map_err(|error| format!("Codex app-serverを起動できません: {error}"))?;
 
-        let stdin = child.stdin.take().ok_or("app-server stdinを取得できません")?;
-        let stdout = child.stdout.take().ok_or("app-server stdoutを取得できません")?;
-        let stderr = child.stderr.take().ok_or("app-server stderrを取得できません")?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or("app-server stdinを取得できません")?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or("app-server stdoutを取得できません")?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or("app-server stderrを取得できません")?;
 
         thread::spawn(move || {
             for line in BufReader::new(stdout).lines().map_while(Result::ok) {
@@ -41,7 +50,11 @@ impl AppServerProcess {
             }
         });
 
-        let mut process = Self { child, stdin, next_request_id: 1 };
+        let mut process = Self {
+            child,
+            stdin,
+            next_request_id: 1,
+        };
         process.write(json!({
             "method": "initialize",
             "id": 0,
@@ -52,21 +65,30 @@ impl AppServerProcess {
     }
 
     pub fn start_thread(&mut self, cwd: &Path) -> Result<u64, String> {
-        self.request("thread/start", json!({
-            "cwd": cwd.to_string_lossy(),
-            "sandbox": "read-only"
-        }))
+        self.request(
+            "thread/start",
+            json!({
+                "cwd": cwd.to_string_lossy(),
+                "sandbox": "read-only"
+            }),
+        )
     }
 
     pub fn start_turn(&mut self, thread_id: &str, text: &str) -> Result<u64, String> {
-        self.request("turn/start", json!({
-            "threadId": thread_id,
-            "input": [{ "type": "text", "text": text }]
-        }))
+        self.request(
+            "turn/start",
+            json!({
+                "threadId": thread_id,
+                "input": [{ "type": "text", "text": text }]
+            }),
+        )
     }
 
     pub fn interrupt(&mut self, thread_id: &str, turn_id: &str) -> Result<u64, String> {
-        self.request("turn/interrupt", json!({ "threadId": thread_id, "turnId": turn_id }))
+        self.request(
+            "turn/interrupt",
+            json!({ "threadId": thread_id, "turnId": turn_id }),
+        )
     }
 
     pub fn is_running(&mut self) -> bool {
@@ -82,8 +104,12 @@ impl AppServerProcess {
 
     fn write(&mut self, value: Value) -> Result<(), String> {
         let encoded = serde_json::to_string(&value).map_err(|error| error.to_string())?;
-        self.stdin.write_all(encoded.as_bytes()).map_err(|error| error.to_string())?;
-        self.stdin.write_all(b"\n").map_err(|error| error.to_string())?;
+        self.stdin
+            .write_all(encoded.as_bytes())
+            .map_err(|error| error.to_string())?;
+        self.stdin
+            .write_all(b"\n")
+            .map_err(|error| error.to_string())?;
         self.stdin.flush().map_err(|error| error.to_string())
     }
 }
