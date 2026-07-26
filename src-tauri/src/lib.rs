@@ -1,5 +1,6 @@
 mod app_server;
 mod git;
+mod storage;
 
 use std::{
     collections::HashMap,
@@ -8,11 +9,11 @@ use std::{
     sync::Mutex,
 };
 
-use serde::Serialize;
-use tauri::{AppHandle, State};
+use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Project {
     id: String,
@@ -20,7 +21,7 @@ struct Project {
     path: String,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct NativeSession {
     id: String,
@@ -35,16 +36,42 @@ struct ShellState {
     projects: Mutex<Vec<Project>>,
     sessions: Mutex<HashMap<String, NativeSession>>,
     runtime: Mutex<Option<app_server::AppServerProcess>>,
+    storage: storage::Storage,
 }
 
-impl Default for ShellState {
-    fn default() -> Self {
-        Self {
-            projects: Mutex::new(Vec::new()),
-            sessions: Mutex::new(HashMap::new()),
+impl ShellState {
+    fn open(storage: storage::Storage) -> Result<Self, String> {
+        let projects = storage.load("projects")?.unwrap_or_default();
+        let sessions = storage.load("sessions")?.unwrap_or_default();
+        Ok(Self {
+            projects: Mutex::new(projects),
+            sessions: Mutex::new(sessions),
             runtime: Mutex::new(None),
-        }
+            storage,
+        })
     }
+}
+
+fn persist_projects(state: &ShellState) -> Result<(), String> {
+    state.storage.save(
+        "projects",
+        &state
+            .projects
+            .lock()
+            .map_err(|_| "状態のロックに失敗しました")?
+            .clone(),
+    )
+}
+
+fn persist_sessions(state: &ShellState) -> Result<(), String> {
+    state.storage.save(
+        "sessions",
+        &state
+            .sessions
+            .lock()
+            .map_err(|_| "状態のロックに失敗しました")?
+            .clone(),
+    )
 }
 
 fn canonical_project_root(raw_path: &str) -> Result<PathBuf, String> {
@@ -87,6 +114,7 @@ fn register_project(
         .lock()
         .map_err(|_| "状態のロックに失敗しました")?
         .push(project.clone());
+    persist_projects(&state)?;
     Ok(project)
 }
 
@@ -140,6 +168,7 @@ fn create_session(state: State<ShellState>, project_id: String) -> Result<Native
         .lock()
         .map_err(|_| "状態のロックに失敗しました")?
         .insert(session.id.clone(), session.clone());
+    persist_sessions(&state)?;
     Ok(session)
 }
 
@@ -174,7 +203,10 @@ fn rename_session(
         .get_mut(&session_id)
         .ok_or("セッションが見つかりません")?;
     session.title = title.to_string();
-    Ok(session.clone())
+    let result = session.clone();
+    drop(sessions);
+    persist_sessions(&state)?;
+    Ok(result)
 }
 
 #[tauri::command]
@@ -199,6 +231,8 @@ fn duplicate_session(
         current_task: "複製元の会話を参照して指示を待機中".to_string(),
     };
     sessions.insert(duplicated.id.clone(), duplicated.clone());
+    drop(sessions);
+    persist_sessions(&state)?;
     Ok(duplicated)
 }
 
@@ -213,6 +247,8 @@ fn end_session(state: State<ShellState>, session_id: String) -> Result<(), Strin
         .ok_or("セッションが見つかりません")?;
     session.status = "stopped".to_string();
     session.current_task = "ユーザーが終了しました".to_string();
+    drop(sessions);
+    persist_sessions(&state)?;
     Ok(())
 }
 
@@ -275,6 +311,8 @@ fn start_codex_session(
         session.status = "running".to_string();
         session.current_task = "Codexセッションを開始中".to_string();
     }
+    drop(sessions);
+    persist_sessions(&state)?;
     Ok(request_id)
 }
 
@@ -297,6 +335,8 @@ fn bind_codex_thread(
     session.external_thread_id = Some(thread_id);
     session.status = "idle".to_string();
     session.current_task = "指示を待機中".to_string();
+    drop(sessions);
+    persist_sessions(&state)?;
     Ok(())
 }
 
@@ -336,6 +376,8 @@ fn send_codex_turn(
         session.status = "running".to_string();
         session.current_task = "Codexが応答を生成中".to_string();
     }
+    drop(sessions);
+    persist_sessions(&state)?;
     Ok(request_id)
 }
 
@@ -346,7 +388,16 @@ fn codex_available() -> bool {
 
 pub fn run() {
     tauri::Builder::default()
-        .manage(ShellState::default())
+        .setup(|app| {
+            let directory = app
+                .path()
+                .app_data_dir()
+                .map_err(|error| std::io::Error::other(format!("アプリデータの保存先を取得できません: {error}")))?;
+            let storage = storage::Storage::open(&directory).map_err(std::io::Error::other)?;
+            let state = ShellState::open(storage).map_err(std::io::Error::other)?;
+            app.manage(state);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             register_project,
             list_projects,
