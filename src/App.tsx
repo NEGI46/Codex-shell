@@ -27,6 +27,7 @@ import {
   X,
 } from "lucide-react";
 import { useShellStore } from "./store";
+import { listenToCodex } from "./native";
 import type { BottomTab, SessionStatus } from "./types";
 
 const statusMeta: Record<SessionStatus, { label: string; className: string }> =
@@ -53,6 +54,10 @@ const bottomTabs: Array<{ id: BottomTab; label: string }> = [
 
 export function App() {
   const shell = useShellStore();
+  const hydrateDesktopState = useShellStore(
+    (state) => state.hydrateDesktopState,
+  );
+  const receiveCodexEvent = useShellStore((state) => state.receiveCodexEvent);
   const [query, setQuery] = useState("");
   const [showClosed, setShowClosed] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -84,6 +89,15 @@ export function App() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [shell]);
+
+  useEffect(() => {
+    void hydrateDesktopState();
+    let unlisten: (() => void)[] = [];
+    void listenToCodex(receiveCodexEvent, () => undefined).then((handlers) => {
+      unlisten = handlers;
+    });
+    return () => unlisten.forEach((handler) => handler());
+  }, [hydrateDesktopState, receiveCodexEvent]);
 
   const terminalBody = useMemo(() => {
     if (shell.bottomTab === "terminal")

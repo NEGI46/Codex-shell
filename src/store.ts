@@ -1,4 +1,10 @@
 import { create } from "zustand";
+import {
+  desktopInvoke,
+  isDesktop,
+  type NativeProject,
+  type NativeSession,
+} from "./native";
 import type {
   Approval,
   BottomTab,
@@ -166,6 +172,8 @@ interface ShellState {
   setPaletteOpen: (open: boolean) => void;
   toggleLeft: () => void;
   toggleBottom: () => void;
+  hydrateDesktopState: () => Promise<void>;
+  receiveCodexEvent: (event: string) => void;
 }
 
 export const useShellStore = create<ShellState>((set, get) => ({
@@ -182,6 +190,24 @@ export const useShellStore = create<ShellState>((set, get) => ({
   leftCollapsed: false,
   bottomCollapsed: false,
   addProject: () => {
+    if (isDesktop()) {
+      const path = window.prompt(
+        "登録するプロジェクトフォルダを入力してください",
+      );
+      if (!path?.trim()) return;
+      const name = window
+        .prompt("プロジェクト名", path.split(/[\\/]/).pop())
+        ?.trim();
+      if (!name) return;
+      void desktopInvoke<NativeProject>("register_project", {
+        name,
+        path,
+      }).then((project) => {
+        if (project)
+          set((state) => ({ projects: [...state.projects, project] }));
+      });
+      return;
+    }
     const id = "project-" + Date.now();
     set((state) => ({
       projects: [
@@ -191,6 +217,23 @@ export const useShellStore = create<ShellState>((set, get) => ({
     }));
   },
   createSession: () => {
+    if (isDesktop()) {
+      const projectId = get().projects[0]?.id;
+      if (!projectId) return;
+      void desktopInvoke<NativeSession>("create_session", { projectId }).then(
+        (native) => {
+          if (!native) return;
+          const session = nativeToSession(native);
+          set((state) => ({
+            sessions: [session, ...state.sessions],
+            openTabIds: [...state.openTabIds, session.id],
+            activeSessionId: session.id,
+          }));
+          void desktopInvoke("start_codex_session", { sessionId: session.id });
+        },
+      );
+      return;
+    }
     const id = "session-" + Date.now();
     const session: Session = {
       id,
@@ -248,6 +291,7 @@ export const useShellStore = create<ShellState>((set, get) => ({
     const { activeSessionId, composer } = get();
     if (!composer.trim() || !activeSessionId) return;
     const prompt = composer.trim();
+    const desktop = isDesktop();
     set((state) => ({
       composer: "",
       sessions: state.sessions.map((session) =>
@@ -270,6 +314,28 @@ export const useShellStore = create<ShellState>((set, get) => ({
           : session,
       ),
     }));
+    if (desktop) {
+      void desktopInvoke("send_codex_turn", {
+        sessionId: activeSessionId,
+        text: prompt,
+      }).catch((error: unknown) =>
+        set((state) => ({
+          sessions: state.sessions.map((session) =>
+            session.id === activeSessionId
+              ? {
+                  ...session,
+                  status: "error" as SessionStatus,
+                  currentTask:
+                    error instanceof Error
+                      ? error.message
+                      : "Codexへ送信できません",
+                }
+              : session,
+          ),
+        })),
+      );
+      return;
+    }
     window.setTimeout(
       () =>
         set((state) => ({
@@ -337,4 +403,79 @@ export const useShellStore = create<ShellState>((set, get) => ({
   toggleLeft: () => set((state) => ({ leftCollapsed: !state.leftCollapsed })),
   toggleBottom: () =>
     set((state) => ({ bottomCollapsed: !state.bottomCollapsed })),
+  hydrateDesktopState: async () => {
+    if (!isDesktop()) return;
+    const [nativeProjects, nativeSessions] = await Promise.all([
+      desktopInvoke<NativeProject[]>("list_projects"),
+      desktopInvoke<NativeSession[]>("list_sessions"),
+    ]);
+    if (!nativeProjects || !nativeSessions) return;
+    const sessions = nativeSessions.map(nativeToSession);
+    set((state) => ({
+      projects: nativeProjects,
+      sessions,
+      openTabIds: sessions.map((session) => session.id),
+      activeSessionId: sessions[0]?.id ?? state.activeSessionId,
+    }));
+  },
+  receiveCodexEvent: (event) => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(event);
+    } catch {
+      return;
+    }
+    const result = parsed as Record<string, unknown>;
+    const thread = result.result as Record<string, unknown> | undefined;
+    const threadId =
+      (typeof thread?.threadId === "string" && thread.threadId) ||
+      (typeof thread?.id === "string" && thread.id);
+    if (!threadId) return;
+    const activeSessionId = get().activeSessionId;
+    if (!activeSessionId) return;
+    void desktopInvoke("bind_codex_thread", {
+      sessionId: activeSessionId,
+      threadId,
+    });
+    set((state) => ({
+      sessions: state.sessions.map((session) =>
+        session.id === activeSessionId
+          ? {
+              ...session,
+              status: "idle",
+              currentTask: "指示を待機中",
+            }
+          : session,
+      ),
+    }));
+  },
 }));
+
+function nativeToSession(native: NativeSession): Session {
+  const status: SessionStatus = isSessionStatus(native.status)
+    ? native.status
+    : "idle";
+  return {
+    id: native.id,
+    projectId: native.projectId,
+    title: native.title,
+    status,
+    currentTask: native.currentTask,
+    updatedAt: now(),
+    unread: 0,
+    pinned: false,
+    messages: [],
+  };
+}
+
+function isSessionStatus(value: string): value is SessionStatus {
+  return [
+    "running",
+    "idle",
+    "needs_input",
+    "needs_approval",
+    "completed",
+    "stopped",
+    "error",
+  ].includes(value);
+}
