@@ -2,7 +2,7 @@
 
 ## Recommendation
 
-Use **Tauri 2 + React/TypeScript + Rust**, with a small local **Codex integration broker** using the official TypeScript @openai/codex-sdk. Rust owns policy enforcement, process lifecycle, filesystem/Git access, persistent metadata, and Tauri IPC. The broker owns only SDK/protocol translation and streaming.
+Use **Tauri 2 + React/TypeScript + Rust**, with a small local **Codex app-server integration broker**. Rust owns policy enforcement, process lifecycle, filesystem/Git access, persistent metadata, and Tauri IPC. The broker owns only app-server JSON-RPC translation and streaming.
 
 This keeps React away from tokens, shell, filesystem, and upstream protocol details. SDK/app-server changes stay in one adapter.
 
@@ -12,7 +12,7 @@ This keeps React away from tokens, shell, filesystem, and upstream protocol deta
 flowchart TB
   UI["React renderer — Japanese dark UI"]
   Core["Tauri Rust core — policy, processes, paths, Git"]
-  Broker["Local broker — Codex SDK adapter"]
+  Broker["Local broker — app-server adapter"]
   Codex["Local Codex runtime — CLI/app-server"]
   Store["SQLite + OS credential store"]
   UI <--> Core
@@ -25,7 +25,7 @@ The broker uses private process transport (stdio or OS-private endpoint), never 
 
 ## Codex integration contract
 
-Official docs describe the TypeScript SDK for starting/resuming Codex threads and codex exec --json for JSONL progress. The SDK is default; CLI JSONL is diagnostic/fallback, not the primary interactive engine.
+The official app-server is the interface Codex uses for rich clients, including authentication, conversation history, approvals, and streamed events. It is the primary interactive integration over private stdio JSONL. The TypeScript SDK and codex exec --json remain separate options for automation/diagnostics, not the primary interactive engine.
 
 CodexAdapter exposes startSession, resumeSession, sendTurn, requestStop, and respondToApproval. It emits versioned normalized events: message_delta, message_final, tool_started, tool_finished, approval_requested, status_changed, file_changed, log, error. Unknown upstream events are redacted diagnostics, never executable instructions.
 
@@ -33,16 +33,16 @@ CodexAdapter exposes startSession, resumeSession, sendTurn, requestStop, and res
 
 SQLite stores non-secret state only.
 
-| Entity | Purpose | Secret policy |
-| --- | --- | --- |
-| projects | canonical root, name, commands, policy | none |
-| sessions | external thread ID, state, title, times | no credentials |
-| turns | message metadata/content references | redact secrets |
-| tabs | order, pinning, restore flags | none |
-| layouts | panel sizes/visibility/presets | none |
-| approvals/audit_events | redacted decisions | no raw secrets |
-| terminal_runs | provenance, cwd, duration, exit | redacted output |
-| prompt_templates | project instructions | no secrets |
+| Entity                 | Purpose                                 | Secret policy   |
+| ---------------------- | --------------------------------------- | --------------- |
+| projects               | canonical root, name, commands, policy  | none            |
+| sessions               | external thread ID, state, title, times | no credentials  |
+| turns                  | message metadata/content references     | redact secrets  |
+| tabs                   | order, pinning, restore flags           | none            |
+| layouts                | panel sizes/visibility/presets          | none            |
+| approvals/audit_events | redacted decisions                      | no raw secrets  |
+| terminal_runs          | provenance, cwd, duration, exit         | redacted output |
+| prompt_templates       | project instructions                    | no secrets      |
 
 Credentials stay in Codex local auth. Any future app-owned secret uses OS credential storage via Rust and never reaches React.
 

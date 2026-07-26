@@ -2,12 +2,12 @@
 
 ## Phases
 
-| Phase | Scope | Exit criteria |
-| --- | --- | --- |
-| 1: design | requirements, ADRs, security, wireframes, bootstrap | reviewed design PR; no app code |
-| 2: MVP | Tauri shell, projects, SDK broker, tabs, stream, approvals, terminal/logs, layout | Windows build and core tests |
-| 3: evidence | Git/diff, monitoring, notifications, templates, palette, test results, multi-terminal | smoke and Playwright pass |
-| 4: advanced | split panes, multi-agent, Skills/MCP, dashboard, plugins | feature threat model and UX validation |
+| Phase       | Scope                                                                                 | Exit criteria                          |
+| ----------- | ------------------------------------------------------------------------------------- | -------------------------------------- |
+| 1: design   | requirements, ADRs, security, wireframes, bootstrap                                   | reviewed design PR; no app code        |
+| 2: MVP      | Tauri shell, projects, SDK broker, tabs, stream, approvals, terminal/logs, layout     | Windows build and core tests           |
+| 3: evidence | Git/diff, monitoring, notifications, templates, palette, test results, multi-terminal | smoke and Playwright pass              |
+| 4: advanced | split panes, multi-agent, Skills/MCP, dashboard, plugins                              | feature threat model and UX validation |
 
 ## Phase 2 slices
 
@@ -25,14 +25,14 @@ If SDK semantics do not expose a required approval control point, pause and revi
 
 ## Test plan
 
-| Layer | Tool | Examples |
-| --- | --- | --- |
-| TypeScript UI | Vitest | tabs, unread, reducer, status |
-| Rust core | cargo test | paths, policy, redaction, migrations |
-| Protocol | contract fixtures | SDK/CLI normalization, unknown event |
-| UI workflow | Playwright | tabs, approval, stop, layout |
-| Desktop | Tauri/Windows | launch, project, mock stream, no token UI |
-| Security | fixtures | injection, root escape, secret redaction |
+| Layer         | Tool              | Examples                                  |
+| ------------- | ----------------- | ----------------------------------------- |
+| TypeScript UI | Vitest            | tabs, unread, reducer, status             |
+| Rust core     | cargo test        | paths, policy, redaction, migrations      |
+| Protocol      | contract fixtures | SDK/CLI normalization, unknown event      |
+| UI workflow   | Playwright        | tabs, approval, stop, layout              |
+| Desktop       | Tauri/Windows     | launch, project, mock stream, no token UI |
+| Security      | fixtures          | injection, root escape, secret redaction  |
 
 ## GitHub workflow
 

@@ -4,7 +4,7 @@ Codex Shell is a local-first desktop workspace for operating multiple OpenAI Cod
 
 ## Development status
 
-**Phase 1 — design and repository bootstrap.** This change contains no desktop application code. The MVP and its security boundaries are documented before implementation begins.
+**Phase 2 — MVP implementation.** The repository now includes a Japanese dark-mode desktop workspace, session tabs, change/approval panels, terminal/log surface, a Tauri native boundary, and Windows CI. The browser preview deliberately uses safe local demo events; the Tauri backend owns real Codex app-server startup.
 
 ## Planned platforms
 
@@ -21,7 +21,17 @@ See [architecture](docs/architecture.md) and [the Codex integration ADR](docs/de
 
 ## Setup and commands
 
-This is design-only; install/run/test commands will be added with the Phase 2 Tauri workspace.
+Prerequisites: Node.js 24 or later; Rust stable and Windows build tools for desktop builds; and a locally authenticated Codex CLI for a real Codex connection.
+
+- npm ci
+- npm run dev — browser UI preview
+- npm run test
+- npm run lint
+- npm run build
+- npm run tauri:dev — Windows/macOS desktop app
+- npm run tauri:build — native debug build
+
+The desktop backend starts Codex app-server over private standard input/output and never opens a network listener. It performs the initialization handshake and forwards event/log lines to the renderer. Install Codex separately and sign in through its supported local flow.
 
 ## Security
 

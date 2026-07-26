@@ -31,15 +31,15 @@ Codex Shell is a personal Windows-first desktop application for supervising and 
 
 ## Session state model
 
-| State | Meaning | UI treatment |
-| --- | --- | --- |
-| `running` | Codex is executing a turn/tool | animated indicator and elapsed time |
-| `idle` | session can accept a prompt | neutral indicator |
-| `needs_input` | Codex asked a question | priority tab badge and notification |
-| `needs_approval` | gated action awaits decision | amber badge and approval focus |
-| `completed` | last turn completed | completion timestamp |
-| `stopped` | user stopped the current run | resumable history |
-| `error` | transport/tool/process failure | sanitized diagnostic |
+| State            | Meaning                        | UI treatment                        |
+| ---------------- | ------------------------------ | ----------------------------------- |
+| `running`        | Codex is executing a turn/tool | animated indicator and elapsed time |
+| `idle`           | session can accept a prompt    | neutral indicator                   |
+| `needs_input`    | Codex asked a question         | priority tab badge and notification |
+| `needs_approval` | gated action awaits decision   | amber badge and approval focus      |
+| `completed`      | last turn completed            | completion timestamp                |
+| `stopped`        | user stopped the current run   | resumable history                   |
+| `error`          | transport/tool/process failure | sanitized diagnostic                |
 
 ## Key flows
 
