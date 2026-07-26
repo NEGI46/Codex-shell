@@ -39,9 +39,10 @@ impl AppServerProcess {
             .take()
             .ok_or("app-server stderrを取得できません")?;
 
+        let stdout_app = app.clone();
         thread::spawn(move || {
             for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-                let _ = app.emit("codex-event", line);
+                let _ = stdout_app.emit("codex-event", line);
             }
         });
         thread::spawn(move || {
